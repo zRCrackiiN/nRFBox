@@ -3,142 +3,132 @@
    https://github.com/cifertech/nrfbox
    ________________________________________ */
 
-#include <Arduino.h> 
+#include <Arduino.h>
+#include <U8g2lib.h>
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEScan.h>
+#include <BLEAdvertisedDevice.h>
 #include "blescan.h"
+#include "neopixel.h"
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
-#define BUTTON_PIN_UP 26
-#define BUTTON_PIN_DOWN 33
-#define BUTTON_PIN_SELECT 27
-#define BUTTON_PIN_BACK 25
+#define BUTTON_PIN_UP     26
+#define BUTTON_PIN_DOWN   33
+#define BUTTON_PIN_CENTER 32  // Exit
+#define BUTTON_PIN_LEFT   25  // Back
+#define BUTTON_PIN_RIGHT  27  // Select
 
-BLEScan* scan;
-BLEScanResults results;
-
-int selectedIndex = 0;
-int displayStartIndex = 0;
-bool showDetails = false;
-unsigned long scanStartTime = 0;
-const unsigned long scanDuration = 5000;
-bool scanComplete = false;
-
-unsigned long lastDebounce = 0;
-unsigned long debounce_Delay = 200;
+static int selectedIndex = 0;
+static int displayStartIndex = 0;
+static bool showDetails = false;
+static BLEAdvertisedDevice selectedDevice;
 
 void blescanSetup() {
-  Serial.begin(115200);
-  u8g2.setFont(u8g2_font_6x10_tr);
-  
-  BLEDevice::init("");
-  scan = BLEDevice::getScan();
+  BLEDevice::init("BLEScanner");
+  BLEScan* scan = BLEDevice::getScan();
   scan->setActiveScan(true);
-  
+
+  selectedIndex = 0;
+  displayStartIndex = 0;
+  showDetails = false;
+
+  u8g2.setFont(u8g2_font_6x10_tr);
+
   pinMode(BUTTON_PIN_UP, INPUT_PULLUP);
   pinMode(BUTTON_PIN_DOWN, INPUT_PULLUP);
-  pinMode(BUTTON_PIN_SELECT, INPUT_PULLUP);
-  pinMode(BUTTON_PIN_BACK, INPUT_PULLUP);
+  pinMode(BUTTON_PIN_CENTER, INPUT_PULLUP);
+  pinMode(BUTTON_PIN_LEFT, INPUT_PULLUP);
+  pinMode(BUTTON_PIN_RIGHT, INPUT_PULLUP);
 
-  
-  for (int cycle = 0; cycle < 3; cycle++) { 
+  for (int cycle = 0; cycle < 3; cycle++) {
     for (int i = 0; i < 3; i++) {
       u8g2.clearBuffer();
       u8g2.setFont(u8g2_font_ncenB08_tr);
       u8g2.drawStr(0, 10, "Scanning BLE");
 
       String dots = "";
-      for (int j = 0; j <= i; j++) {
-        dots += " .";
-        setNeoPixelColour("white");
+      for (int j = 0; j <= i; j++) dots += " .";
+      u8g2.drawStr(75, 10, dots.c_str());
+
+      setNeoPixelColour("white");
+      u8g2.sendBuffer();
+      delay(300);
+    }
+  }
+  setNeoPixelColour("0");
+
+  BLEScanResults results = scan->start(5, false);
+  scan->stop();
+
+  std::vector<BLEAdvertisedDevice> devices;
+  for (int i = 0; i < results.getCount(); i++) {
+    devices.push_back(results.getDevice(i));
+  }
+
+  while (true) {
+    if (digitalRead(BUTTON_PIN_CENTER) == LOW) {
+      while (digitalRead(BUTTON_PIN_CENTER) == LOW);
+      return;
+    }
+
+    if (!showDetails) {
+      u8g2.clearBuffer();
+      u8g2.setFont(u8g2_font_6x10_tr);
+      u8g2.drawStr(0, 10, "BLE Devices:");
+
+      for (int i = 0; i < 5 && (i + displayStartIndex) < devices.size(); i++) {
+        BLEAdvertisedDevice device = devices[i + displayStartIndex];
+        String name = device.getName().c_str();
+        if (name.length() == 0) name = "No Name";
+        String info = name.substring(0, 7) + " | RSSI " + String(device.getRSSI());
+
+        if ((i + displayStartIndex) == selectedIndex) u8g2.drawStr(0, 20 + i * 10, ">");
+        u8g2.drawStr(10, 20 + i * 10, info.c_str());
       }
-      setNeoPixelColour("0");
-      
-      u8g2.drawStr(75, 10, dots.c_str()); 
 
       u8g2.sendBuffer();
-      delay(300); 
+
+      if (digitalRead(BUTTON_PIN_UP) == LOW) {
+        if (selectedIndex > 0) selectedIndex--;
+        if (selectedIndex < displayStartIndex) displayStartIndex--;
+        delay(200);
+      }
+
+      if (digitalRead(BUTTON_PIN_DOWN) == LOW) {
+        if (selectedIndex < devices.size() - 1) selectedIndex++;
+        if (selectedIndex >= displayStartIndex + 5) displayStartIndex++;
+        delay(200);
+      }
+
+      if (digitalRead(BUTTON_PIN_RIGHT) == LOW) {
+        selectedDevice = devices[selectedIndex];
+        showDetails = true;
+        delay(200);
+      }
+
+    } else {
+      u8g2.clearBuffer();
+      u8g2.setFont(u8g2_font_6x10_tr);
+      u8g2.drawStr(0, 10, "Device Details:");
+      u8g2.setFont(u8g2_font_5x8_tr);
+      u8g2.drawStr(0, 20, ("Name: " + String(selectedDevice.getName().c_str())).c_str());
+      u8g2.drawStr(0, 30, ("Addr: " + String(selectedDevice.getAddress().toString().c_str())).c_str());
+      u8g2.drawStr(0, 40, ("RSSI: " + String(selectedDevice.getRSSI())).c_str());
+      u8g2.drawStr(0, 50, "Press LEFT to go back");
+      u8g2.sendBuffer();
+
+      if (digitalRead(BUTTON_PIN_LEFT) == LOW) {
+        while (digitalRead(BUTTON_PIN_LEFT) == LOW);
+        showDetails = false;
+        delay(200);
+      }
+
+      if (digitalRead(BUTTON_PIN_CENTER) == LOW) {
+        while (digitalRead(BUTTON_PIN_CENTER) == LOW);
+        return;
+      }
     }
   }
-
-  scanStartTime = millis();
-  scan->start(scanDuration / 1000, false);
-}
-
-void blescanLoop() {
-  unsigned long currentMillis = millis();
-  if (currentMillis - scanStartTime >= scanDuration && !scanComplete) {
-    scanComplete = true;
-    results = scan->getResults();
-    scan->stop();
-    u8g2.clearBuffer();
-    u8g2.drawStr(0, 10, "Scan complete.");
-    u8g2.sendBuffer();
-  }
-
-  if (currentMillis - lastDebounce > debounce_Delay) {
-    if (digitalRead(BUTTON_PIN_UP) == LOW) {
-      if (selectedIndex > 0) {
-        selectedIndex--;
-        if (selectedIndex < displayStartIndex) {
-          displayStartIndex--;
-        }
-      }
-      lastDebounce = currentMillis;
-    } else if (digitalRead(BUTTON_PIN_DOWN) == LOW) {
-      if (selectedIndex < results.getCount() - 1) {
-        selectedIndex++;
-        if (selectedIndex >= displayStartIndex + 5) {
-          displayStartIndex++;
-        }
-      }
-      lastDebounce = currentMillis;
-    } else if (digitalRead(BUTTON_PIN_SELECT) == LOW) {
-      showDetails = true;
-      lastDebounce = currentMillis;
-    }
-  }
-
-  if (!showDetails && scanComplete) {
-    u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(0, 10, "BLE Devices:");
-
-    int deviceCount = results.getCount();
-    for (int i = 0; i < 5; i++) {
-      int deviceIndex = i + displayStartIndex;
-      if (deviceIndex >= deviceCount) break;
-      BLEAdvertisedDevice device = results.getDevice(deviceIndex);
-      String deviceName = device.getName().c_str();
-      if (deviceName.length() == 0) {
-        deviceName = "No Name";
-      }
-      String deviceInfo = deviceName.substring(0, 7) + " | RSSI " + String(device.getRSSI());
-      if (deviceIndex == selectedIndex) {
-        u8g2.drawStr(0, 20 + i * 10, ">");
-      }
-      u8g2.drawStr(10, 20 + i * 10, deviceInfo.c_str());
-    }
-    u8g2.sendBuffer();
-  }
-
-  if (showDetails) {
-    BLEAdvertisedDevice device = results.getDevice(selectedIndex);
-    u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(0, 10, "Device Details:");
-    u8g2.setFont(u8g2_font_5x8_tr);
-    String name = "Name: " + String(device.getName().c_str());
-    String address = "Addr: " + String(device.getAddress().toString().c_str());
-    String rssi = "RSSI: " + String(device.getRSSI());
-    u8g2.drawStr(0, 20, name.c_str());
-    u8g2.drawStr(0, 30, address.c_str());
-    u8g2.drawStr(0, 40, rssi.c_str());
-    u8g2.drawStr(0, 50, "Press LEFT to go back");
-    u8g2.sendBuffer();
-
-    if (digitalRead(BUTTON_PIN_BACK) == LOW) {
-      showDetails = false;
-      lastDebounce = currentMillis;
-    }
-  }  
 }

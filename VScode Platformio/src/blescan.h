@@ -11,6 +11,5 @@
 #include "neopixel.h"
 
 void blescanSetup();
-void blescanLoop();
 
 #endif

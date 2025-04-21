@@ -2,7 +2,7 @@
    This software is licensed under the MIT License:
    https://github.com/cifertech/nrfbox
    ________________________________________ */
-   
+
 #ifndef flipper_H
 #define flipper_H
 
@@ -18,6 +18,5 @@
 #include "esp_wifi.h"
 
 void flipperSetup();
-void flipperLoop();
 
 #endif
