@@ -10,7 +10,6 @@
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
 #include "blescan.h"
-#include "neopixel.h"
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
@@ -52,12 +51,10 @@ void blescanSetup() {
       for (int j = 0; j <= i; j++) dots += " .";
       u8g2.drawStr(75, 10, dots.c_str());
 
-      setNeoPixelColour("white");
       u8g2.sendBuffer();
       delay(300);
     }
   }
-  setNeoPixelColour("0");
 
   BLEScanResults results = scan->start(5, false);
   scan->stop();

@@ -11,7 +11,6 @@ extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
 #define CE_PIN_1  5
 #define CSN_PIN_1 17
-
 #define CE_PIN_2  16
 #define CSN_PIN_2 4
 

@@ -8,9 +8,6 @@
 
 #include <BLEDevice.h>
 #include <U8g2lib.h>
-#include <Adafruit_NeoPixel.h>
-
-extern bool neoPixelActive;
 
 void settingSetup();
 void settingLoop();

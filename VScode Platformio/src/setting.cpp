@@ -9,18 +9,14 @@
 #include "setting.h"
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-extern Adafruit_NeoPixel pixels;
 
 #define BUTTON_UP 26
 #define BUTTON_DOWN 33
 #define BUTTON_SELECT 27
-
-#define EEPROM_ADDRESS_NEOPIXEL 0
 #define EEPROM_ADDRESS_BRIGHTNESS 1
 
 int currentOption = 0;
 int totalOptions = 2;
-bool neoPixelActive = false;
 uint8_t oledBrightness = 100;
 
 bool buttonUpPressed = false;
@@ -29,11 +25,7 @@ bool buttonSelectPressed = false;
 
 void toggleOption(int option) {
   if (option == 0) { 
-    neoPixelActive = !neoPixelActive;
-    EEPROM.write(EEPROM_ADDRESS_NEOPIXEL, neoPixelActive);
     EEPROM.commit();
-    Serial.print("NeoPixel is now ");
-    Serial.println(neoPixelActive ? "Enabled" : "Disabled");
   } else if (option == 1) { 
     uint8_t brightnessPercent = map(oledBrightness, 0, 255, 0, 100); // Map to 0-100
     brightnessPercent += 10; // Increment brightness by 10%
@@ -87,11 +79,6 @@ void displayMenu() {
   u8g2.drawStr(0, 10, "Settings Menu");
 
   // Draw menu options
-  if (currentOption == 0) {
-    u8g2.drawStr(0, 25, "> NeoPixel: ");
-  } else {
-    u8g2.drawStr(0, 25, "  NeoPixel: ");
-  }
 
   if (currentOption == 1) {
     u8g2.drawStr(0, 40, "> Brightness: ");
@@ -100,8 +87,6 @@ void displayMenu() {
   }
 
   // Show current settings
-  u8g2.setCursor(80, 25);
-  u8g2.print(neoPixelActive ? "Enabled" : "Disabled");
 
   u8g2.setCursor(80, 40);
   uint8_t brightnessPercent = map(oledBrightness, 0, 255, 0, 100);
@@ -118,7 +103,6 @@ void settingSetup() {
   EEPROM.begin(512);
 
   // Load settings from EEPROM
-  neoPixelActive = EEPROM.read(EEPROM_ADDRESS_NEOPIXEL);
   oledBrightness = EEPROM.read(EEPROM_ADDRESS_BRIGHTNESS);
   
   if (oledBrightness > 255) oledBrightness = 128; // Ensure valid brightness

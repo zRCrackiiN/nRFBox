@@ -11,10 +11,8 @@
 #include <RF24.h>
 #include <Wire.h>
 #include <U8g2lib.h>
-#include "neopixel.h"
 #include "esp_bt.h"
 #include "esp_wifi.h"
-#include "neopixel.h"
 
 void blackoutSetup();
 void blackoutLoop();

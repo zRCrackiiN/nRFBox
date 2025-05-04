@@ -8,7 +8,6 @@
 #include "setting.h"
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-extern Adafruit_NeoPixel pixels;
 
 #define NRF24_CONFIG      0x00
 #define NRF24_EN_AA       0x01
@@ -74,14 +73,12 @@ void ScanChannels(void) {
   DIsable();
  // for (int j = 0; j < 10; j++) {
     for (int i = 0; i < CHANNELS; i++) {
-      setNeoPixelColour("purple");
       setregister(NRF24_RF_CH, (128 * i) / CHANNELS);
       setrx();
       delayMicroseconds(40);
       DIsable();
       if (getregister(NRF24_RPD) > 0) CHannel[i]++;
     }
-    setNeoPixelColour("0");
  // }
 }
 

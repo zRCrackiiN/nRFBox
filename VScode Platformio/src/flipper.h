@@ -13,7 +13,6 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
-#include "neopixel.h"
 #include "esp_bt.h"
 #include "esp_wifi.h"
 

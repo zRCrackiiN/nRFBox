@@ -8,7 +8,6 @@
 #include "scanner.h"
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-extern Adafruit_NeoPixel pixels;
 
 #define CE  5
 #define CSN 17
@@ -130,10 +129,7 @@ void outputChannels(void) {
   // Draw the graph moving right-to-left
   for (byte count = 0; count < 127; count++) {
     u8g2.drawLine(127 - count, 63, 127 - count, 63 - sensorArray[count]);
-    setNeoPixelColour("purple");
   }
-  
-  setNeoPixelColour("0");
 
   u8g2.setFont(u8g2_font_ncenB08_tr);
   u8g2.setCursor(12, 12);

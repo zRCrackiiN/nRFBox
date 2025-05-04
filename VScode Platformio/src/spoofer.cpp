@@ -7,7 +7,6 @@
 #include "spoofer.h"
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-extern Adafruit_NeoPixel pixels;
 
 BLEAdvertising *pAdvertising;  
 std::string devices_uuid = "00003082-0000-1000-9000-00805f9b34fb";
@@ -413,18 +412,16 @@ void changeAdvTypePrev() {
 
 void toggleAdvertising() {
   
-  setNeoPixelColour("0");
+
 
   isAdvertising = !isAdvertising;
   
   if (!isAdvertising) {
     pAdvertising->stop();
-    setNeoPixelColour("red");
     Serial.println("Advertising stopped.");
     updateDisplay();
   }
   if (isAdvertising) {
-      setNeoPixelColour("0");
     if (attack_state == 1) {
       esp_bd_addr_t dummy_addr = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
       for (int i = 0; i < 6; i++) {

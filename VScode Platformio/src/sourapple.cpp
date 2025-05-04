@@ -7,7 +7,6 @@
 #include "sourapple.h"
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-extern Adafruit_NeoPixel pixels;
 
 std::string device_uuid = "00003082-0000-1000-9000-00805f9b34fb";
 

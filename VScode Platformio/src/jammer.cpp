@@ -259,12 +259,10 @@ void jammerLoop(){
  
     if (jamming) {
       u8g2.setCursor(80, 60);
-      u8g2.print("Active ");
-      setNeoPixelColour("red");        
+      u8g2.print("Active ");     
     }else{
       u8g2.setCursor(80, 60);
       u8g2.print("disable ");
-      setNeoPixelColour("0");
     }
 
     u8g2.sendBuffer();

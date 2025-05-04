@@ -44,9 +44,7 @@ void wifiscanSetup() {
       String dots = "";
       for (int j = 0; j <= i; j++) {
         dots += " .";
-        setNeoPixelColour("white");
       }
-      setNeoPixelColour("0");
       
       u8g2.drawStr(80, 10, dots.c_str()); 
 
