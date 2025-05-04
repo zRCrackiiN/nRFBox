@@ -1,7 +1,7 @@
-/* ____________________________
-   This software is licensed under the MIT License:
-   https://github.com/cifertech/nrfbox
-   ________________________________________ */
+extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int32_t c) {
+  // now all driver calls get routed here
+  return 0;
+}
 
    #include <Arduino.h>
    #include <U8g2lib.h>
@@ -278,8 +278,8 @@
              case  6: sourappleSetup();   current_screen = SCREEN_SOUR_APPLE; break;
              case  7: blescanSetup();     current_screen = SCREEN_BLE_SCAN;   break;
              case  8: flipperSetup();     current_screen = SCREEN_FLIPPER_SCAN;break;
-             case  9: wifiscanSetup();    current_screen = SCREEN_WIFI_DEAUTH;  break;
-             case 10: wifiDeauthSetup();    current_screen = SCREEN_WIFI_SCAN;  break;
+             case  9: wifiscanSetup();    current_screen = SCREEN_WIFI_SCAN;  break;
+             case 10: wifiDeauthSetup();    current_screen = SCREEN_WIFI_DEAUTH;  break;
              case 11:                      current_screen = SCREEN_ABOUT;       break;
              case 12: settingSetup();     current_screen = SCREEN_SETTING;    break;
            }
@@ -410,10 +410,11 @@
 
        // ─── SCREEN_WIFI_DEAUTH ──────────────────────────────────────────────────────
        case SCREEN_WIFI_DEAUTH:
-        if (wifiDeauthLoop()) {
-          current_screen = SCREEN_MENU;
-        }
-        break;
+          // Run the entire Deauth UI+logic; returns true only when a deliberate long‐hold
+          if (wifiDeauthLoop()) {
+            current_screen = SCREEN_MENU;
+          }
+          break;
 
        // ─── SCREEN_ABOUT ──────────────────────────────────────────────────────────
        case SCREEN_ABOUT:
