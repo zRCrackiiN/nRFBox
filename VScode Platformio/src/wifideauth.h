@@ -2,6 +2,8 @@
 #define WIFIDEAUTH_H
 
 #include <stdint.h>
+#include "pindefs.h"
+
 
 // Initialize the WiFi Deauth module (call once when entering screen)
 void wifiDeauthSetup();

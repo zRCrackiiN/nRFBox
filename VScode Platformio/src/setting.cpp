@@ -1,49 +1,68 @@
-/* ____________________________
-   This software is licensed under the MIT License:
-   https://github.com/cifertech/nrfbox
-   ________________________________________ */
-
 #include <EEPROM.h>
 #include <U8g2lib.h>
-
 #include "setting.h"
+#include "pindefs.h"
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
-#define BUTTON_UP 26
-#define BUTTON_DOWN 33
-#define BUTTON_SELECT 27
 #define EEPROM_ADDRESS_BRIGHTNESS 1
 
-int currentOption = 0;
-int totalOptions = 2;
-uint8_t oledBrightness = 100;
+int    currentOption  = 0;
+int    totalOptions   = 2;
+uint8_t oledBrightness = 100; 
 
-bool buttonUpPressed = false;
-bool buttonDownPressed = false;
-bool buttonSelectPressed = false;
+static bool buttonUpPressed       = false;
+static bool buttonDownPressed     = false;
+static bool buttonSelectPressed   = false;
+static bool buttonLeftPressed     = false;
 
-void toggleOption(int option) {
-  if (option == 0) { 
+// Toggle action for the two settings options
+static void toggleOption(int option) {
+  if (option == 0) {
     EEPROM.commit();
-  } else if (option == 1) { 
-    uint8_t brightnessPercent = map(oledBrightness, 0, 255, 0, 100); // Map to 0-100
-    brightnessPercent += 10; // Increment brightness by 10%
-    if (brightnessPercent > 100) brightnessPercent = 0; // Wrap around to 0
-    oledBrightness = map(brightnessPercent, 0, 100, 0, 255); // Map back to 0-255
-
-    u8g2.setContrast(oledBrightness); // Apply the brightness
+  } else if (option == 1) {
+    uint8_t pct = map(oledBrightness, 0, 255, 0, 100);
+    pct = (pct + 10) % 110;       // +10%, wrap at 100→0
+    oledBrightness = map(pct, 0, 100, 0, 255);
+    u8g2.setContrast(oledBrightness);
     EEPROM.write(EEPROM_ADDRESS_BRIGHTNESS, oledBrightness);
     EEPROM.commit();
-
-    Serial.print("Brightness set to: ");
-    Serial.print(brightnessPercent);
-    Serial.println("%");
   }
 }
 
-void handleButtons() {
-  if (!digitalRead(BUTTON_UP)) {
+// Draw the two‐line settings menu
+static void displayMenu() {
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_6x10_tf);
+  u8g2.drawStr(0, 10, "Settings Menu");
+
+  // Option 0: Commit EEPROM
+  u8g2.drawStr(0, 30, currentOption==0 ? "> Save" : "  Save");
+  // Option 1: Brightness
+  char buf[16];
+  uint8_t pct = map(oledBrightness, 0, 255, 0, 100);
+  snprintf(buf, sizeof(buf), "Brightness %d%%", pct);
+  u8g2.drawStr(0, 50, currentOption==1 ? (String("> ")+buf).c_str()
+                                        : (String("  ")+buf).c_str());
+  u8g2.sendBuffer();
+}
+
+void settingSetup() {
+  EEPROM.begin(512);
+  oledBrightness = EEPROM.read(EEPROM_ADDRESS_BRIGHTNESS);
+  if (oledBrightness > 255) oledBrightness = 128;
+  u8g2.setContrast(oledBrightness);
+
+  pinMode(BUTTON_PIN_UP, INPUT_PULLUP);
+  pinMode(BUTTON_PIN_DOWN, INPUT_PULLUP);
+  pinMode(BUTTON_PIN_CENTER, INPUT_PULLUP);
+  pinMode(BUTTON_PIN_LEFT, INPUT_PULLUP);
+}
+
+// Runs every loop; returns true when LEFT is held to exit
+bool settingLoop() {
+  // UP
+  if (!digitalRead(BUTTON_PIN_UP)) {
     if (!buttonUpPressed) {
       buttonUpPressed = true;
       currentOption = (currentOption - 1 + totalOptions) % totalOptions;
@@ -52,7 +71,8 @@ void handleButtons() {
     buttonUpPressed = false;
   }
 
-  if (!digitalRead(BUTTON_DOWN)) {
+  // DOWN
+  if (!digitalRead(BUTTON_PIN_DOWN)) {
     if (!buttonDownPressed) {
       buttonDownPressed = true;
       currentOption = (currentOption + 1) % totalOptions;
@@ -61,7 +81,8 @@ void handleButtons() {
     buttonDownPressed = false;
   }
 
-  if (!digitalRead(BUTTON_SELECT)) {
+  // CENTER = select/toggle
+  if (!digitalRead(BUTTON_PIN_CENTER)) {
     if (!buttonSelectPressed) {
       buttonSelectPressed = true;
       toggleOption(currentOption);
@@ -69,52 +90,18 @@ void handleButtons() {
   } else {
     buttonSelectPressed = false;
   }
-}
 
-void displayMenu() {
-  u8g2.clearBuffer();
-
-  // Draw menu header
-  u8g2.setFont(u8g2_font_6x10_tf);
-  u8g2.drawStr(0, 10, "Settings Menu");
-
-  // Draw menu options
-
-  if (currentOption == 1) {
-    u8g2.drawStr(0, 40, "> Brightness: ");
+  // LEFT = exit back to menu
+  if (!digitalRead(BUTTON_PIN_LEFT)) {
+    if (!buttonLeftPressed) {
+      buttonLeftPressed = true;
+      return true;
+    }
   } else {
-    u8g2.drawStr(0, 40, "  Brightness: ");
+    buttonLeftPressed = false;
   }
 
-  // Show current settings
-
-  u8g2.setCursor(80, 40);
-  uint8_t brightnessPercent = map(oledBrightness, 0, 255, 0, 100);
-  u8g2.print(brightnessPercent);
-  u8g2.print("%");
-
-  u8g2.sendBuffer();
-}
-
-void settingSetup() {
-  Serial.begin(115200);
-
-  // Initialize EEPROM
-  EEPROM.begin(512);
-
-  // Load settings from EEPROM
-  oledBrightness = EEPROM.read(EEPROM_ADDRESS_BRIGHTNESS);
-  
-  if (oledBrightness > 255) oledBrightness = 128; // Ensure valid brightness
-  u8g2.setContrast(oledBrightness);
-
-  // Initialize buttons
-  pinMode(BUTTON_UP, INPUT_PULLUP);
-  pinMode(BUTTON_DOWN, INPUT_PULLUP);
-  pinMode(BUTTON_SELECT, INPUT_PULLUP);
-}
-
-void settingLoop() {
-  handleButtons();
+  // draw it every time
   displayMenu();
+  return false;
 }

@@ -1,15 +1,9 @@
 #include "SnakeGame.h"
 #include <Arduino.h>
+#include "pindefs.h"
 
 // Pull in your OLED instance from main .ino
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-
-// Button pins (must match your main .ino)
-#define BUTTON_UP_PIN     26
-#define BUTTON_DOWN_PIN   33
-#define BUTTON_LEFT_PIN   25
-#define BUTTON_RIGHT_PIN  27
-#define BUTTON_SELECT_PIN 32
 
 // Grid config
 static const int cellSize   = 4;
@@ -114,7 +108,7 @@ bool loopSnakeGame() {
   unsigned long now = millis();
 
   // Debounced SELECT press: enter/operate pause menu
-  if (digitalRead(BUTTON_SELECT_PIN) == LOW && now - lastBtnTime > debounceDelay) {
+  if (digitalRead(BUTTON_PIN_CENTER) == LOW && now - lastBtnTime > debounceDelay) {
     lastBtnTime = now;
     if (!paused) {
       // enter pause
@@ -139,11 +133,11 @@ bool loopSnakeGame() {
 
   // If paused, handle UP/DOWN navigation and redraw menu
   if (paused) {
-    if (digitalRead(BUTTON_UP_PIN) == LOW && now - lastBtnTime > debounceDelay) {
+    if (digitalRead(BUTTON_PIN_UP) == LOW && now - lastBtnTime > debounceDelay) {
       pauseIndex = (pauseIndex + 2) % 3;
       lastBtnTime = now;
     }
-    if (digitalRead(BUTTON_DOWN_PIN) == LOW && now - lastBtnTime > debounceDelay) {
+    if (digitalRead(BUTTON_PIN_DOWN) == LOW && now - lastBtnTime > debounceDelay) {
       pauseIndex = (pauseIndex + 1) % 3;
       lastBtnTime = now;
     }
@@ -152,10 +146,10 @@ bool loopSnakeGame() {
   }
 
   // Normal movement
-  if      (digitalRead(BUTTON_UP_PIN)    == LOW && dirY == 0) { dirX = 0; dirY = -1; }
-  else if (digitalRead(BUTTON_DOWN_PIN)  == LOW && dirY == 0) { dirX = 0; dirY =  1; }
-  else if (digitalRead(BUTTON_LEFT_PIN)  == LOW && dirX == 0) { dirX = -1; dirY = 0; }
-  else if (digitalRead(BUTTON_RIGHT_PIN) == LOW && dirX == 0) { dirX =  1; dirY = 0; }
+  if      (digitalRead(BUTTON_PIN_UP)    == LOW && dirY == 0) { dirX = 0; dirY = -1; }
+  else if (digitalRead(BUTTON_PIN_DOWN)  == LOW && dirY == 0) { dirX = 0; dirY =  1; }
+  else if (digitalRead(BUTTON_PIN_LEFT)  == LOW && dirX == 0) { dirX = -1; dirY = 0; }
+  else if (digitalRead(BUTTON_PIN_RIGHT) == LOW && dirX == 0) { dirX =  1; dirY = 0; }
 
   // Advance game tick
   if (now - lastMove > moveInterval) {

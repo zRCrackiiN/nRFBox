@@ -27,9 +27,7 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
    #include "blackout.h"
    #include "flipper.h"
    #include "wifideauth.h"
-   
-   // flipper.h does not declare its loop function—forward‐declare it here:
-   void flipperLoop();
+   #include "pindefs.h"
    
    // ── RF24 MODULE PINS ─────────────────────────────────────────────────────────
    #define CE_PIN_A   5
@@ -82,17 +80,13 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
      { "Setting" }
    };
    
-   // ── BUTTON PINS ───────────────────────────────────────────────────────────────
-   #define BUTTON_UP_PIN     26
-   #define BUTTON_DOWN_PIN   33
-   #define BUTTON_LEFT_PIN   25
-   #define BUTTON_RIGHT_PIN  27
-   #define BUTTON_SELECT_PIN 32
-   
    int button_up_clicked     = 0;
    int button_down_clicked   = 0;
-   int button_select_clicked = 0;
-   
+   int button_center_clicked = 0;
+   int button_left_clicked = 0;
+   static unsigned long aboutLeftHoldStart = 0;
+   static constexpr unsigned long ABOUT_HOLD_TIME = 1000;  // ms to hold before exit
+
    // ── MENU STATE ────────────────────────────────────────────────────────────────
    int item_selected     = 0;
    int item_sel_previous = 0;
@@ -121,11 +115,11 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
    // ── SECRET-CODE CONFIG ─────────────────────────────────────────────────────────
    const int SECRET_CODE_LENGTH = 9;
    int secretCode[SECRET_CODE_LENGTH] = {
-     BUTTON_UP_PIN, BUTTON_DOWN_PIN,
-     BUTTON_UP_PIN, BUTTON_DOWN_PIN,
-     BUTTON_LEFT_PIN, BUTTON_RIGHT_PIN,
-     BUTTON_LEFT_PIN, BUTTON_RIGHT_PIN,
-     BUTTON_SELECT_PIN
+     BUTTON_PIN_UP, BUTTON_PIN_DOWN,
+     BUTTON_PIN_UP, BUTTON_PIN_DOWN,
+     BUTTON_PIN_LEFT, BUTTON_PIN_RIGHT,
+     BUTTON_PIN_LEFT, BUTTON_PIN_RIGHT,
+     BUTTON_PIN_CENTER
    };
    int  secretCodeIndex   = 0;
    bool secretCodeEntered = false;
@@ -137,11 +131,11 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
    //----------------------------------------------------------------------------
    void checkSecretCode() {
      int pins[5] = {
-       BUTTON_UP_PIN,
-       BUTTON_DOWN_PIN,
-       BUTTON_LEFT_PIN,
-       BUTTON_RIGHT_PIN,
-       BUTTON_SELECT_PIN
+       BUTTON_PIN_UP,
+       BUTTON_PIN_DOWN,
+       BUTTON_PIN_LEFT,
+       BUTTON_PIN_RIGHT,
+       BUTTON_PIN_CENTER
      };
      for (int i = 0; i < 5; i++) {
        int p = pins[i];
@@ -178,8 +172,8 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
        secretCodeEntered = false;
        setupSnakeGame();
        // wait for SELECT to be released so we don’t immediately exit
-       while (digitalRead(BUTTON_SELECT_PIN) == LOW) delay(10);
-       button_select_clicked = 0;
+       while (digitalRead(BUTTON_PIN_CENTER) == LOW) delay(10);
+       button_center_clicked = 0;
        current_screen = SCREEN_SNAKE;
      }
    }
@@ -238,11 +232,11 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
      setupSnakeGame();
    
      // Button inputs
-     pinMode(BUTTON_UP_PIN,     INPUT_PULLUP);
-     pinMode(BUTTON_DOWN_PIN,   INPUT_PULLUP);
-     pinMode(BUTTON_LEFT_PIN,   INPUT_PULLUP);
-     pinMode(BUTTON_RIGHT_PIN,  INPUT_PULLUP);
-     pinMode(BUTTON_SELECT_PIN, INPUT_PULLUP);
+     pinMode(BUTTON_PIN_UP,     INPUT_PULLUP);
+     pinMode(BUTTON_PIN_DOWN,   INPUT_PULLUP);
+     pinMode(BUTTON_PIN_LEFT,   INPUT_PULLUP);
+     pinMode(BUTTON_PIN_RIGHT,  INPUT_PULLUP);
+     pinMode(BUTTON_PIN_CENTER, INPUT_PULLUP);
    }
    
    //----------------------------------------------------------------------------
@@ -254,20 +248,20 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
        // ─── SCREEN_MENU ─────────────────────────────────────────────────────────
        case SCREEN_MENU: {
          // Navigate Up/Down
-         if (digitalRead(BUTTON_UP_PIN) == LOW && !button_up_clicked) {
+         if (digitalRead(BUTTON_PIN_UP) == LOW && !button_up_clicked) {
            button_up_clicked = 1;
            item_selected = (item_selected == 0) ? NUM_ITEMS - 1 : item_selected - 1;
          }
-         if (digitalRead(BUTTON_DOWN_PIN) == LOW && !button_down_clicked) {
+         if (digitalRead(BUTTON_PIN_DOWN) == LOW && !button_down_clicked) {
            button_down_clicked = 1;
            item_selected = (item_selected + 1) % NUM_ITEMS;
          }
-         if (digitalRead(BUTTON_UP_PIN) == HIGH)   button_up_clicked   = 0;
-         if (digitalRead(BUTTON_DOWN_PIN) == HIGH) button_down_clicked = 0;
+         if (digitalRead(BUTTON_PIN_UP) == HIGH)   button_up_clicked   = 0;
+         if (digitalRead(BUTTON_PIN_DOWN) == HIGH) button_down_clicked = 0;
    
          // Select
-         if (digitalRead(BUTTON_SELECT_PIN) == LOW && !button_select_clicked) {
-           button_select_clicked = 1;
+         if (digitalRead(BUTTON_PIN_CENTER) == LOW && !button_center_clicked) {
+           button_center_clicked = 1;
            switch(item_selected) {
              case  0: scannerSetup();     current_screen = SCREEN_SCANNER;    break;
              case  1: analyzerSetup();    current_screen = SCREEN_ANALYZER;   break;
@@ -285,7 +279,7 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
            }
            delay(200);
          }
-         if (digitalRead(BUTTON_SELECT_PIN) == HIGH) button_select_clicked = 0;
+         if (digitalRead(BUTTON_PIN_CENTER) == HIGH) button_center_clicked = 0;
    
          // Draw menu
          item_sel_previous = (item_selected + NUM_ITEMS - 1) % NUM_ITEMS;
@@ -310,103 +304,75 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
    
        // ─── SCREEN_SCANNER ────────────────────────────────────────────────────────
        case SCREEN_SCANNER:
-         scannerLoop();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
+         if (scannerLoop()) {
+           current_screen=SCREEN_MENU;
          }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
          break;
    
        // ─── SCREEN_ANALYZER ───────────────────────────────────────────────────────
        case SCREEN_ANALYZER:
-         analyzerLoop();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
-         }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
-         break;
+       if (analyzerLoop()) {
+         current_screen = SCREEN_MENU;
+       }
+       break;     
    
        // ─── SCREEN_WLAN_JAMMER ────────────────────────────────────────────────────
        case SCREEN_WLAN_JAMMER:
-         jammerLoop();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
+         if (jammerLoop()) {
+           current_screen=SCREEN_MENU;
          }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
          break;
    
        // ─── SCREEN_PROTO_KILL ─────────────────────────────────────────────────────
        case SCREEN_PROTO_KILL:
-         blackoutLoop();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
-         }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
-         break;
+       if (blackoutLoop()) {
+         current_screen = SCREEN_MENU;
+       }
+       break;
    
        // ─── SCREEN_BLE_JAMMER ─────────────────────────────────────────────────────
        case SCREEN_BLE_JAMMER:
-         blejammerLoop();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
-         }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
-         break;
+       if (blejammerLoop()) {
+         current_screen = SCREEN_MENU;
+       }
+       break;
    
        // ─── SCREEN_BLE_SPOOFER ────────────────────────────────────────────────────
        case SCREEN_BLE_SPOOFER:
-         spooferLoop();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
-         }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
-         break;
+       if (spooferLoop()) {
+         current_screen = SCREEN_MENU;
+       }
+       break;
    
        // ─── SCREEN_SOUR_APPLE ──────────────────────────────────────────────────────
        case SCREEN_SOUR_APPLE:
-         sourappleLoop();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
-         }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
-         break;
+       sourappleSetup();
+       if ( sourappleLoop() ) {
+         current_screen = SCREEN_MENU;
+       }
+       break;
    
        // ─── SCREEN_BLE_SCAN ───────────────────────────────────────────────────────
        case SCREEN_BLE_SCAN:
-         blescanSetup();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
-         }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
-         break;
+       // blescanLoop() runs one frame; returns true when LEFT was pressed on the list
+       if (blescanLoop()) {
+         current_screen = SCREEN_MENU;
+       }
+       break;
    
        // ─── SCREEN_FLIPPER_SCAN ───────────────────────────────────────────────────
        case SCREEN_FLIPPER_SCAN:
-         flipperSetup(); // now forward-declared above
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
-         }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
-         break;
+       if (flipperLoop()) {
+         current_screen = SCREEN_MENU;
+       }
+       break;
    
        // ─── SCREEN_WIFI_SCAN ──────────────────────────────────────────────────────
        case SCREEN_WIFI_SCAN:
-         wifiscanLoop();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
-         }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
-         break;
+       if (wifiscanLoop()) {
+         current_screen = SCREEN_MENU;
+       }
+       break;
 
        // ─── SCREEN_WIFI_DEAUTH ──────────────────────────────────────────────────────
        case SCREEN_WIFI_DEAUTH:
@@ -418,13 +384,24 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
 
        // ─── SCREEN_ABOUT ──────────────────────────────────────────────────────────
        case SCREEN_ABOUT:
-         about();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
+       about();  // draw your About screen once (make sure it doesn't clear the flag)
+       
+       if (digitalRead(BUTTON_PIN_LEFT) == LOW) {
+         // first time we see it go low, record the time
+         if (aboutLeftHoldStart == 0) {
+           aboutLeftHoldStart = millis();
          }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
-         break;
+         // if we've held it long enough, exit
+         else if (millis() - aboutLeftHoldStart >= ABOUT_HOLD_TIME) {
+           current_screen = SCREEN_MENU;
+           aboutLeftHoldStart = 0;
+           delay(200);
+         }
+       } else {
+         // released before threshold, reset timer
+         aboutLeftHoldStart = 0;
+       }
+       break;
    
        // ─── SCREEN_SNAKE ──────────────────────────────────────────────────────────
        case SCREEN_SNAKE:
@@ -435,13 +412,9 @@ extern "C" int __wrap_ieee80211_raw_frame_sanity_check(int32_t a, int32_t b, int
    
        // ─── SCREEN_SETTING ────────────────────────────────────────────────────────
        case SCREEN_SETTING:
-         settingLoop();
-         if (digitalRead(BUTTON_SELECT_PIN)==LOW && !button_select_clicked) {
-           button_select_clicked=1;
-           current_screen=SCREEN_MENU; delay(200);
-         }
-         if (digitalRead(BUTTON_SELECT_PIN)==HIGH) button_select_clicked=0;
-         break;
+       if (settingLoop()) 
+         current_screen = SCREEN_MENU;
+       break;
      }
    }
    

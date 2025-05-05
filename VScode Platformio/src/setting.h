@@ -8,8 +8,11 @@
 
 #include <BLEDevice.h>
 #include <U8g2lib.h>
+#include "pindefs.h"
+
+extern uint8_t oledBrightness;
 
 void settingSetup();
-void settingLoop();
+bool settingLoop();
 
 #endif

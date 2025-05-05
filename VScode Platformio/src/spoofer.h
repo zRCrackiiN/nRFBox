@@ -10,8 +10,9 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 #include <U8g2lib.h>
+#include "pindefs.h"
 
 void spooferSetup();
-void spooferLoop();
+bool spooferLoop();
 
 #endif

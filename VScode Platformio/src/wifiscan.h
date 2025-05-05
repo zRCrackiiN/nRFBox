@@ -3,13 +3,14 @@
    https://github.com/cifertech/nrfbox
    ________________________________________ */
    
-#ifndef wifiscan_H
-#define wifiscan_H
+#ifndef WIFISCAN_H
+#define WIFISCAN_H
 
 #include <WiFi.h>
 #include <U8g2lib.h>
+#include "pindefs.h"
 
 void wifiscanSetup();
-void wifiscanLoop();
+bool wifiscanLoop();
 
 #endif

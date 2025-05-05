@@ -3,12 +3,13 @@
    https://github.com/cifertech/nrfbox
    ________________________________________ */
    
-#ifndef blescan_H
-#define blescan_H
+#ifndef BLESCAN_H
+#define BLESCAN_H
 
 #include <BLEDevice.h>
 #include <U8g2lib.h>
+#include "pindefs.h"
 
 void blescanSetup();
-
+bool blescanLoop();
 #endif

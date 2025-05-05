@@ -1,138 +1,115 @@
-/* ____________________________
-   This software is licensed under the MIT License:
-   https://github.com/cifertech/nrfbox
-   ________________________________________ */
-
-#include <EEPROM.h> // Include EEPROM library
-#include <Arduino.h> 
+// scanner.cpp
+#include <Arduino.h>
+#include <EEPROM.h>
+#include <SPI.h>
+#include <U8g2lib.h>
 #include "scanner.h"
+#include "pindefs.h"
 
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
 
-#define CE  5
+// nRF24 pins
+#define CE   5
 #define CSN 17
 
-#define CHANNELS  64
-int channel[CHANNELS];
+// EEPROM storage base address
+#define EEPROM_ADDRESS_SENSOR_ARRAY 2
 
-int line;
-char grey[] = " .:-=+*aRW";
+// Graph buffer length
+#define CHANNELS    64
+static int  channelValues[CHANNELS];
+static byte sensorArray[128];
 
-#define _NRF24_CONFIG      0x00
-#define _NRF24_EN_AA       0x01
-#define _NRF24_RF_CH       0x05
-#define _NRF24_RF_SETUP    0x06
-#define _NRF24_RPD         0x09
+// Timing
+static unsigned long lastSaveTime = 0;
+static const unsigned long saveInterval = 5000;
 
-#define EEPROM_ADDRESS_SENSOR_ARRAY 2 
+// LEFT-button exit flag
+static bool buttonLeftHeld = false;
 
-byte sensorArray[129];
+// ——— low-level nRF24 routines ——————————————————————————————
 
-unsigned long lastSaveTime = 0; 
-const unsigned long saveInterval = 5000; 
-
-byte getRegister(byte r) {
-  byte c;
+static byte getRegister(byte r) {
   digitalWrite(CSN, LOW);
   SPI.transfer(r & 0x1F);
-  c = SPI.transfer(0);
+  byte val = SPI.transfer(0);
   digitalWrite(CSN, HIGH);
-  return c;
+  return val;
 }
 
-void setRegister(byte r, byte v) {
+static void setRegister(byte r, byte v) {
   digitalWrite(CSN, LOW);
   SPI.transfer((r & 0x1F) | 0x20);
   SPI.transfer(v);
   digitalWrite(CSN, HIGH);
 }
 
-void powerUp(void) {
-  setRegister(_NRF24_CONFIG, getRegister(_NRF24_CONFIG) | 0x02);
+static void powerUp() {
+  setRegister(0x00, getRegister(0x00) | 0x02);
   delayMicroseconds(130);
 }
 
-void powerDown(void) {
-  setRegister(_NRF24_CONFIG, getRegister(_NRF24_CONFIG) & ~0x02);
-}
-
-void enable(void) {
-  digitalWrite(CE, HIGH);
-}
-
-void disable(void) {
+static void disableRadio() {
   digitalWrite(CE, LOW);
 }
 
-void setRX(void) {
-  setRegister(_NRF24_CONFIG, getRegister(_NRF24_CONFIG) | 0x01);
-  enable();
+static void enableRx() {
+  setRegister(0x00, getRegister(0x00) | 0x01);
+  digitalWrite(CE, HIGH);
   delayMicroseconds(100);
 }
 
-void scanChannels(void) {
-  disable();
+// ——— scanning & display ——————————————————————————————————
 
-  memset(channel, 0, sizeof(channel));
+static void scanChannels() {
+  disableRadio();
+  memset(channelValues, 0, sizeof(channelValues));
+  const int samplesPerChannel = 50;
 
-  const int samplesPerChannel = 50; // Number of samples per channel to average
-
-  for (int i = 0; i < CHANNELS; i++) {
-    setRegister(_NRF24_RF_CH, (128 * i) / CHANNELS);
-
-    for (int j = 0; j < samplesPerChannel; j++) {
-      setRX();
-      delayMicroseconds(100); 
-      disable();
-      channel[i] += getRegister(_NRF24_RPD); // Add the RPD value (1 or 0)
+  for (int ch = 0; ch < CHANNELS; ch++) {
+    setRegister(0x05, (128 * ch) / CHANNELS);
+    for (int s = 0; s < samplesPerChannel; s++) {
+      enableRx();
+      delayMicroseconds(100);
+      disableRadio();
+      channelValues[ch] += getRegister(0x09);  // RPD bit
     }
-
-    // Average the accumulated values for this channel
-    channel[i] = (channel[i] * 100) / samplesPerChannel; // Convert to percentage
+    // normalize to percentage
+    channelValues[ch] = (channelValues[ch]*100)/samplesPerChannel;
   }
 }
 
-
-void outputChannels(void) {
+static void outputChannels() {
+  // find max
   int norm = 0;
-
-  // Find the maximum value in the channel array for normalization
   for (int i = 0; i < CHANNELS; i++) {
-    if (channel[i] > norm) {
-      norm = channel[i];
-    }
+    if (channelValues[i] > norm) norm = channelValues[i];
   }
+  byte drawH = map(norm, 0, 100, 0, 63);
 
-  byte drawHeight = map(norm, 0, 64, 0, 64); 
-  
-  // Update sensorArray with the new value (shift left for right-to-left movement)
-  for (byte count = 126; count > 0; count--) {
-    sensorArray[count] = sensorArray[count - 1];
-  }
-  sensorArray[0] = drawHeight;
+  // shift graph buffer right->left
+  memmove(&sensorArray[1], &sensorArray[0], 127);
+  sensorArray[0] = drawH;
 
   u8g2.clearBuffer();
 
-  u8g2.drawLine(0, 0, 0, 63);
-  u8g2.drawLine(127, 0, 127, 63);
-
-  for (byte count = 0; count < 64; count += 10) {
-    u8g2.drawLine(127, count, 122, count); // Right side markers
-    u8g2.drawLine(0, count, 5, count);    // Left side markers
+  // axes
+  u8g2.drawLine(0,0,0,63);
+  u8g2.drawLine(127,0,127,63);
+  for (int y=0; y<=63; y+=10) {
+    u8g2.drawLine(0,y,5,y);
+    u8g2.drawLine(127,y,122,y);
   }
 
-  for (byte count = 10; count < 127; count += 10) {
-    u8g2.drawPixel(count, 0);
-    u8g2.drawPixel(count, 63);
+  // graph
+  for (int x=0; x<127; x++) {
+    byte h = sensorArray[x];
+    u8g2.drawLine(127-x,63,127-x,63-h);
   }
 
-  // Draw the graph moving right-to-left
-  for (byte count = 0; count < 127; count++) {
-    u8g2.drawLine(127 - count, 63, 127 - count, 63 - sensorArray[count]);
-  }
-
+  // current peak
   u8g2.setFont(u8g2_font_ncenB08_tr);
-  u8g2.setCursor(12, 12);
+  u8g2.setCursor(12,12);
   u8g2.print("[");
   u8g2.print(norm);
   u8g2.print("]");
@@ -140,58 +117,76 @@ void outputChannels(void) {
   u8g2.sendBuffer();
 }
 
-void loadPreviousGraph() {
-  EEPROM.begin(128); 
-  for (byte i = 0; i < 128; i++) {
+static void loadPreviousGraph() {
+  EEPROM.begin(256);
+  for (int i = 0; i < 128; i++) {
     sensorArray[i] = EEPROM.read(EEPROM_ADDRESS_SENSOR_ARRAY + i);
   }
-  EEPROM.end(); 
+  EEPROM.end();
 }
 
-void saveGraphToEEPROM() {
-  EEPROM.begin(128); 
-  for (byte i = 0; i < 128; i++) {
+static void saveGraphToEEPROM() {
+  EEPROM.begin(256);
+  for (int i = 0; i < 128; i++) {
     EEPROM.write(EEPROM_ADDRESS_SENSOR_ARRAY + i, sensorArray[i]);
   }
-  EEPROM.commit(); 
-  EEPROM.end();    
+  EEPROM.commit();
+  EEPROM.end();
 }
+
+// ——— public interface ——————————————————————————————————
 
 void scannerSetup() {
   Serial.begin(115200);
 
+  // shutdown BT/Wi-Fi
   esp_bt_controller_deinit();
   esp_wifi_stop();
   esp_wifi_deinit();
-  
-  for (byte count = 0; count <= 128; count++) {
-    sensorArray[count] = 0;
-  }
 
-  SPI.begin(18, 19, 23, 17);
+  // clear buffer
+  memset(sensorArray, 0, sizeof(sensorArray));
+
+  // SPI + nRF24 init
+  SPI.begin(18,19,23,17);
   SPI.setDataMode(SPI_MODE0);
   SPI.setFrequency(16000000);
   SPI.setBitOrder(MSBFIRST);
 
   pinMode(CE, OUTPUT);
   pinMode(CSN, OUTPUT);
-
-  disable();
-
+  disableRadio();
   powerUp();
-  setRegister(_NRF24_EN_AA, 0x0);
-  setRegister(_NRF24_RF_SETUP, 0x0F);
+  setRegister(0x01, 0x00); // disable AA
+  setRegister(0x06, 0x0F); // RF_SETUP
 
+  // load past state
   loadPreviousGraph();
+
+  // LEFT button for exit
+  pinMode(BUTTON_PIN_LEFT, INPUT_PULLUP);
 }
 
-void scannerLoop() {
+bool scannerLoop() {
+  // — exit on LEFT hold —
+  if (digitalRead(BUTTON_PIN_LEFT) == LOW && !buttonLeftHeld) {
+    buttonLeftHeld = true;
+    return true;
+  }
+  if (digitalRead(BUTTON_PIN_LEFT) == HIGH) {
+    buttonLeftHeld = false;
+  }
+
+  // normal scan & draw
   scanChannels();
   outputChannels();
 
-  // Save the graph to EEPROM every 5 seconds
+  // periodic EEPROM save
   if (millis() - lastSaveTime > saveInterval) {
     saveGraphToEEPROM();
     lastSaveTime = millis();
   }
+
+  delay(50);
+  return false;
 }

@@ -13,8 +13,9 @@
 #include <U8g2lib.h>
 #include "esp_bt.h"
 #include "esp_wifi.h"
+#include "pindefs.h"
 
 void blejammerSetup();
-void blejammerLoop();
+bool blejammerLoop();
 
 #endif

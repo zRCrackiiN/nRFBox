@@ -3,144 +3,139 @@
    https://github.com/cifertech/nrfbox
    ________________________________________ */
 
-#include <Arduino.h> 
-#include "wifiscan.h"
-
-extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
-
-#define BTN_PIN_UP 26
-#define BTN_PIN_DOWN 33
-#define BTN_PIN_SELECT 27
-#define BTN_PIN_BACK 25
-
-int currentIndex = 0;
-int listStartIndex = 0;
-bool isDetailView = false;
-unsigned long scan_StartTime = 0;
-const unsigned long scanTimeout = 5000;
-bool isScanComplete = false;
-
-unsigned long lastButtonPress = 0;
-unsigned long debounceTime = 200;
-
-void wifiscanSetup() {
-  Serial.begin(115200);
-  u8g2.setFont(u8g2_font_6x10_tr);
-  
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  
-  pinMode(BTN_PIN_UP, INPUT_PULLUP);
-  pinMode(BTN_PIN_DOWN, INPUT_PULLUP);
-  pinMode(BTN_PIN_SELECT, INPUT_PULLUP);
-  pinMode(BTN_PIN_BACK, INPUT_PULLUP);
-  
-  for (int cycle = 0; cycle < 3; cycle++) { 
-    for (int i = 0; i < 3; i++) {
-      u8g2.clearBuffer();
-      u8g2.setFont(u8g2_font_ncenB08_tr);
-      u8g2.drawStr(0, 10, "Scanning WiFi");
-
-      String dots = "";
-      for (int j = 0; j <= i; j++) {
-        dots += " .";
-      }
-      
-      u8g2.drawStr(80, 10, dots.c_str()); 
-
-      u8g2.sendBuffer();
-      delay(300); 
-    }
-  }
-  
-  scan_StartTime = millis();
-  isScanComplete = false;
-}
-
-void wifiscanLoop() {
-  unsigned long currentMillis = millis();
-
-  if (!isScanComplete && currentMillis - scan_StartTime < scanTimeout) {
-    int foundNetworks = WiFi.scanNetworks();
-    if (foundNetworks >= 0) {
-      isScanComplete = true;
-    }
-  }
-
-  if (currentMillis - lastButtonPress > debounceTime) {
-    if (digitalRead(BTN_PIN_UP) == LOW) {
-      if (currentIndex > 0) {
-        currentIndex--;
-        if (currentIndex < listStartIndex) {
-          listStartIndex--;
-        }
-      }
-      lastButtonPress = currentMillis;
-    } else if (digitalRead(BTN_PIN_DOWN) == LOW) {
-      if (currentIndex < WiFi.scanComplete() - 1) {
-        currentIndex++;
-        if (currentIndex >= listStartIndex + 5) {
-          listStartIndex++;
-        }
-      }
-      lastButtonPress = currentMillis;
-    } else if (digitalRead(BTN_PIN_SELECT) == LOW) {
-      isDetailView = true;
-      lastButtonPress = currentMillis;
-    }
-  }
-
-  if (!isDetailView && isScanComplete) {
-    u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(0, 10, "Wi-Fi Networks:");
-
-    int networkCount = WiFi.scanComplete();
-    for (int i = 0; i < 5; i++) {
-      int currentNetworkIndex = i + listStartIndex;
-      if (currentNetworkIndex >= networkCount) break;
-
-      String networkName = WiFi.SSID(currentNetworkIndex);
-      int rssi = WiFi.RSSI(currentNetworkIndex);
-
-      String networkInfo = networkName.substring(0, 7);
-      String networkrssi = " | RSSI " + String(rssi);
-
-      if (currentNetworkIndex == currentIndex) {
-        u8g2.drawStr(0, 20 + i * 10, ">");
-      }
-      u8g2.drawStr(10, 20 + i * 10, networkInfo.c_str());
-      u8g2.drawStr(50, 20 + i * 10, networkrssi.c_str());
-    }
-    u8g2.sendBuffer();
-  }
-
-  if (isDetailView) {
-    String networkName = WiFi.SSID(currentIndex);
-    String networkBSSID = WiFi.BSSIDstr(currentIndex);
-    int rssi = WiFi.RSSI(currentIndex);
-    int channel = WiFi.channel(currentIndex);
-
-    u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_6x10_tr);
-    u8g2.drawStr(0, 10, "Network Details:");
-
-    u8g2.setFont(u8g2_font_5x8_tr);
-    String name = "SSID: " + networkName;
-    String bssid = "BSSID: " + networkBSSID;
-    String signal = "RSSI: " + String(rssi);
-    String ch = "Channel: " + String(channel);
-
-    u8g2.drawStr(0, 20, name.c_str());
-    u8g2.drawStr(0, 30, bssid.c_str());
-    u8g2.drawStr(0, 40, signal.c_str());
-    u8g2.drawStr(0, 50, ch.c_str());
-    u8g2.drawStr(0, 60, "Press LEFT to go back");
-    u8g2.sendBuffer();
-
-    if (digitalRead(BTN_PIN_BACK) == LOW) {
-      isDetailView = false;
-      lastButtonPress = currentMillis;
-    }
-  }
-}
+   #include "wifiscan.h"
+   #include <Arduino.h>
+   #include <U8g2lib.h>
+   #include <WiFi.h>
+   #include "pindefs.h"
+   #include <vector>
+   
+   extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2;
+   
+   // ── Network record type ───────────────────────────────────────────────────────
+   struct Network {
+     String ssid;
+     String bssid;
+     int     rssi;
+     int     channel;
+   };
+   
+   // ── Module state ───────────────────────────────────────────────────────────────
+   static std::vector<Network> networks;
+   static int  currentIndex     = 0;
+   static int  listStartIndex   = 0;
+   static bool isDetailView     = false;
+   static unsigned long lastButtonPress = 0;
+   static const unsigned long debounceTime = 200;
+   
+   // ── wifiscanSetup() ───────────────────────────────────────────────────────────
+   void wifiscanSetup() {
+     // Prepare display & Wi-Fi
+     u8g2.setFont(u8g2_font_6x10_tr);
+     WiFi.mode(WIFI_STA);
+     WiFi.disconnect();
+   
+     // Perform scan immediately
+     int n = WiFi.scanNetworks();
+     networks.clear();
+     for (int i = 0; i < n; i++) {
+       networks.push_back({
+         WiFi.SSID(i),
+         WiFi.BSSIDstr(i),
+         WiFi.RSSI(i),
+         WiFi.channel(i)
+       });
+     }
+   
+     // Reset navigation state
+     currentIndex     = 0;
+     listStartIndex   = 0;
+     isDetailView     = false;
+     lastButtonPress  = millis();
+   
+     // Configure buttons
+     pinMode(BUTTON_PIN_UP,     INPUT_PULLUP);
+     pinMode(BUTTON_PIN_DOWN,   INPUT_PULLUP);
+     pinMode(BUTTON_PIN_LEFT,   INPUT_PULLUP);
+     pinMode(BUTTON_PIN_CENTER, INPUT_PULLUP);
+     pinMode(BUTTON_PIN_RIGHT,  INPUT_PULLUP);  // <–– now we need this
+   }
+   
+   // ── wifiscanLoop() ────────────────────────────────────────────────────────────
+   bool wifiscanLoop() {
+     unsigned long now = millis();
+   
+     // 1) LEFT on list → exit module
+     if (!isDetailView && digitalRead(BUTTON_PIN_LEFT) == LOW) {
+       while (digitalRead(BUTTON_PIN_LEFT) == LOW) delay(10);
+       delay(200);
+       return true;
+     }
+   
+     // 2) DRAW current view
+     u8g2.clearBuffer();
+     u8g2.setFont(u8g2_font_6x10_tr);
+   
+     if (!isDetailView) {
+       // List view
+       u8g2.drawStr(0, 10, "Wi-Fi Networks:");
+       int count = networks.size();
+       for (int i = 0; i < 5 && i + listStartIndex < count; i++) {
+         auto &net = networks[i + listStartIndex];
+         if (i + listStartIndex == currentIndex) {
+           u8g2.drawStr(0, 20 + i*10, ">");
+         }
+         u8g2.drawStr(10, 20 + i*10, net.ssid.substring(0,7).c_str());
+         u8g2.drawStr(70, 20 + i*10, String(net.rssi).c_str());
+       }
+   
+     } else {
+       // Detail view
+       u8g2.drawStr(0, 10, "Network Details:");
+       u8g2.setFont(u8g2_font_5x8_tr);
+       auto &net = networks[currentIndex];
+   
+       u8g2.drawStr(0, 20, ("SSID:    " + net.ssid).c_str());
+       u8g2.drawStr(0, 30, ("BSSID:   " + net.bssid).c_str());
+       u8g2.drawStr(0, 40, ("RSSI:    " + String(net.rssi)).c_str());
+       u8g2.drawStr(0, 50, ("Channel: " + String(net.channel)).c_str());
+       u8g2.drawStr(0, 60, "CENTER:back");
+     }
+   
+     u8g2.sendBuffer();
+   
+     // 3) Handle input (with debounce)
+     if (now - lastButtonPress > debounceTime) {
+       if (!isDetailView) {
+         // Navigate list
+         if (digitalRead(BUTTON_PIN_UP) == LOW && currentIndex > 0) {
+           currentIndex--;
+           if (currentIndex < listStartIndex) listStartIndex--;
+           lastButtonPress = now;
+         }
+         else if (digitalRead(BUTTON_PIN_DOWN) == LOW &&
+                  currentIndex < (int)networks.size() - 1) {
+           currentIndex++;
+           if (currentIndex >= listStartIndex + 5) listStartIndex++;
+           lastButtonPress = now;
+         }
+         else if (digitalRead(BUTTON_PIN_RIGHT) == LOW) {
+           // RIGHT enters detail view
+           isDetailView    = true;
+           lastButtonPress = now;
+         }
+   
+       } else {
+         // In detail, CENTER → back to list
+         if (digitalRead(BUTTON_PIN_CENTER) == LOW) {
+           while (digitalRead(BUTTON_PIN_CENTER) == LOW) delay(10);
+           isDetailView    = false;
+           lastButtonPress = now;
+         }
+       }
+     }
+   
+     // 4) stay on this screen
+     return false;
+   }
+   

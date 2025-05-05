@@ -3,8 +3,8 @@
    https://github.com/cifertech/nrfbox
    ________________________________________ */
 
-#ifndef flipper_H
-#define flipper_H
+#ifndef FLIPPER_H
+#define FLIPPER_H
 
 #include <SPI.h>
 #include <Wire.h>
@@ -15,7 +15,9 @@
 #include <BLEAdvertisedDevice.h>
 #include "esp_bt.h"
 #include "esp_wifi.h"
+#include "pindefs.h"
 
 void flipperSetup();
+bool flipperLoop();
 
 #endif
